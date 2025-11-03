@@ -1,3 +1,9 @@
+"""
+This script MUST be called from the directory containing plots/images to classify.
+Run the script and open your browser to http://localhost:8000
+Press '1'/'2' to classify each image and use arrow left/right to navigate between images.
+The classification is stored in JSON format in a subdir named 'selections'.
+"""
 import glob
 import http.server
 import json
@@ -6,8 +12,12 @@ import re
 import socketserver
 import urllib.parse
 
+# glob.glob() pattern matching files to sort through:
 files = "*.png"
+# different keys to press to classify each image:
 keys = {"1": "good", "2": "bad"}
+
+# ------------------------------------------------------
 
 INDEX_HTML = """
 <!doctype html>
@@ -143,6 +153,7 @@ function init(data) {
   window.addEventListener('keydown', function(e){
     const tag = (document.activeElement && document.activeElement.tagName) || '';
     if(tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable) return;
+    if(e.ctrlKey || e.altKey || e.shiftKey || e.metaKey) return;
 
     if(e.key === 'ArrowRight'){
       e.preventDefault(); showNext();
