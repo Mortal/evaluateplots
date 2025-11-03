@@ -125,7 +125,7 @@ function init(data) {
     const key = imageselection[current];
     if (hint) hint.textContent = `(${index+1}/${filenames.length}) ${current}`;
     document.title = `Image selection (${index+1}/${filenames.length}) ${current}`;
-    history.replaceState(history.state, "", `${location.pathname}?${window.encodeURIComponent(current)}`);
+    history.replaceState(history.state, "", `${location.pathname}?f=${window.encodeURIComponent(current)}`);
     for (let j = 0; j < preload.length; ++j)
       preload[j].src = filenames[(index + j + 1) % filenames.length];
     updateFormSelection(current);
@@ -176,9 +176,8 @@ function init(data) {
     classify(filenames[index], k);
   });
 
-  const f = location.search.replace("?", "").replace(/[;&].*/, "");
-  const i = filenames.indexOf(window.decodeURIComponent(f));
-  console.log(location.search, i);
+  const f = new URLSearchParams(location.search).get("f") ?? new URLSearchParams(location.hash.replace("#", "")).get("f") ?? "";
+  const i = filenames.indexOf(f);
   showIndex(i === -1 ? 0 : i);
 }
   </script>
