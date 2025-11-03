@@ -4,6 +4,7 @@ Run the script and open your browser to http://localhost:8000
 Press '1'/'2' to classify each image and use arrow left/right to navigate between images.
 The classification is stored in JSON format in a subdir named 'selections'.
 """
+import webbrowser
 import glob
 import http.server
 import json
@@ -25,7 +26,7 @@ INDEX_HTML = """
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Evaluate plots</title>
+  <title>Image selection</title>
   <!-- Thx to ChatGTP for help w/HTLM https://chatgpt.com/share/68f51123-dab0-8006-ac9a-644a997d9b68 + https://chatgpt.com/share/6908ee67-0990-8006-8d00-ac22ac169130 -->
   <style>
     html,body{height:100%;margin:0}
@@ -219,9 +220,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 data = body.decode("utf-8", errors="replace")
             filename = re.sub(r"[^0-9a-zA-Z-]", "", data["session"]) + ".json"
             savedata = json.dumps(data["imageselection"])
-            print(filename)
+            path = os.path.join("selections", filename)
+            print(f"Write to {path}:")
             print(savedata, flush=True)
-            with open(os.path.join("selections", filename), "w") as ofp:
+            with open(path, "w") as ofp:
                 ofp.write(savedata)
             self.send_response(200)
             self.end_headers()
@@ -238,7 +240,12 @@ def main() -> None:
     port = 8000
     os.makedirs("selections", exist_ok=True)
     with ReusableTCPServer(("", port), Handler) as httpd:
-        print(f"Serving at http://localhost:{port}")
+        url = f"http://localhost:{port}"
+        print(f"Serving at {url}")
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
         httpd.serve_forever()
 
 
