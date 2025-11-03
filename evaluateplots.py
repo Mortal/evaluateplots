@@ -40,20 +40,23 @@ INDEX_HTML = """
       top:-9999px;
     }
 
-    .hint{
-      color:rgba(255,255,255,0.85);
-      font-family:system-ui,sans-serif;
-      font-size:13px;
-      background:rgba(0,0,0,0.35);
-      padding:6px 8px;
-      border-radius:6px;
-    }
     .hintcontainer{
       position:fixed;
       left:12px;
-      right:12px;
-      text-align:center;
       bottom:12px;
+      color:rgba(255,255,255,0.85);
+      font-family:system-ui,sans-serif;
+      font-size:13px;
+      background:rgba(0,0,0,0.65);
+      padding:6px 8px;
+      border-radius:6px;
+    }
+    .keyform {
+      display: inline;
+    }
+    .keyform label {
+      margin: 0 1em;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -62,7 +65,10 @@ INDEX_HTML = """
   <img class="preload" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="preload" aria-hidden="true" />
   <img class="preload" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="preload" aria-hidden="true" />
   <img class="preload" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="preload" aria-hidden="true" />
-  <div class="hintcontainer"><span class="hint"></span></div>
+  <div class="hintcontainer">
+    <form id="keyform" class="keyform"></form>
+    <span class="hint"></span>
+  </div>
   <script>
 function init(data) {
   const session = new Date().toISOString().replace(/:/g, "-");
@@ -71,57 +77,92 @@ function init(data) {
   const viewer = document.getElementById('viewer');
   const hint = document.querySelector(".hint");
   const preload = [...document.querySelectorAll('.preload')];
+  const form = document.getElementById('keyform');
   const imageselection = data.imageselection ?? {};
   let index = 0;
+
+  if (form) {
+    for (const [k, label] of Object.entries(keys)) {
+      const id = `key_${k}`;
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'classification';
+      input.id = id;
+      input.value = k;
+
+      const lab = document.createElement('label');
+      lab.setAttribute('for', id);
+      lab.textContent = `${label} (${k})`;
+
+      form.appendChild(input);
+      form.appendChild(lab);
+    }
+  }
+
+  // update checked state when current image changes
+  function updateFormSelection(current) {
+    if (form == null) return;
+    const selectedKey = imageselection[current];
+    for (const input of form.elements) {
+      input.checked = input.value === selectedKey;
+    }
+  }
 
   function showIndex(i){
     index = (i + filenames.length) % filenames.length;
     const current = filenames[index];
     viewer.src = current;
     const key = imageselection[current];
-    const label = key ? ` → ${keys[key]} (${key})` : "";
-    if (hint) hint.textContent = `(${index+1}/${filenames.length}) ${current}${label}`;
+    if (hint) hint.textContent = `(${index+1}/${filenames.length}) ${current}`;
     document.title = `Image selection (${index+1}/${filenames.length}) ${current}`;
     history.replaceState(history.state, "", `${location.pathname}?${window.encodeURIComponent(current)}`);
     for (let j = 0; j < preload.length; ++j)
       preload[j].src = filenames[(index + j + 1) % filenames.length];
+    updateFormSelection(current);
   }
 
   function showNext(){ showIndex(index + 1); }
   function showPrev(){ showIndex(index - 1); }
+
+  function classify(currentpath, key) {
+    imageselection[currentpath] = key;
+    console.log(`Selected ${currentpath}: ${keys[key]} (${key})`);
+    showIndex(index); // refresh hint
+
+    // send POST to /save
+    fetch("/save", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        session,
+        imageselection,
+      })
+    }).catch(err => alert("POST /save failed:", err));
+  }
 
   window.addEventListener('keydown', function(e){
     const tag = (document.activeElement && document.activeElement.tagName) || '';
     if(tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable) return;
 
     if(e.key === 'ArrowRight'){
-      e.preventDefault();
-      showNext();
+      e.preventDefault(); showNext();
     } else if(e.key === 'ArrowLeft'){
-      e.preventDefault();
-      showPrev();
+      e.preventDefault(); showPrev();
     } else if(keys[e.key]) {
-      // record classification
-      const currentpath = filenames[index];
-      imageselection[currentpath] = e.key;
-      console.log(`Selected ${currentpath}: ${keys[e.key]} (${e.key})`);
-      showIndex(index); // update hint immediately
-
-      // send POST to /save
-      fetch("/save", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-          session,
-          imageselection,
-        })
-      }).catch(err => alert("POST /save failed:", err));
+      e.preventDefault();
+      classify(filenames[index], e.key);
     }
   });
 
   viewer.addEventListener('click', function(e){
     const w = viewer.clientWidth;
     if(e.clientX > w/2) showNext(); else showPrev();
+  });
+
+  // click handler for mouse radio selection
+  form?.addEventListener('change', function(e){
+    const k = e.target.value;
+    classify(filenames[index], k);
   });
 
   const f = location.search.replace("?", "").replace(/[;&].*/, "");
@@ -166,9 +207,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 data = json.loads(body)
             except Exception:
                 data = body.decode("utf-8", errors="replace")
-            print("Received /save:", data)
             filename = re.sub(r"[^0-9a-zA-Z-]", "", data["session"]) + ".json"
             savedata = json.dumps(data["imageselection"])
+            print(filename)
+            print(savedata, flush=True)
             with open(os.path.join("selections", filename), "w") as ofp:
                 ofp.write(savedata)
             self.send_response(200)
